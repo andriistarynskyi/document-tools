@@ -41,8 +41,26 @@ module.exports = (env, argv) => {
     plugins: [
       new HtmlWebpackPlugin({
         template: './index.html',
-        // strip the CSP meta tag in dev so HMR websocket isn't blocked
-        ...(isProd ? {} : { meta: {} }),
+        // Inject CSP only in production. In dev the HMR client needs unsafe-eval
+        // which the strict CSP blocks — easier to omit it entirely during development.
+        ...(isProd ? {
+          meta: {
+            'Content-Security-Policy': {
+              'http-equiv': 'Content-Security-Policy',
+              content: [
+                "default-src 'none'",
+                "script-src 'self' blob:",
+                "worker-src 'self' blob:",
+                "style-src 'self' 'unsafe-inline'",
+                "img-src 'self' data:",
+                "font-src 'self'",
+                "connect-src 'self'",
+                "base-uri 'none'",
+                "form-action 'none'",
+              ].join('; '),
+            },
+          },
+        } : {}),
       }),
       new MiniCssExtractPlugin({ filename: '[name].[contenthash:8].css' }),
       new CopyPlugin({

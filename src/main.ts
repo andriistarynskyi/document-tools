@@ -100,7 +100,7 @@ async function handleFile(file: File | undefined): Promise<void> {
     const buffer = await file.arrayBuffer();
     const result = await extractTables(buffer, (fraction) => setProgress(fraction, 'Analyzing PDF…'));
     if (!result.tables.length) {
-      return setStatus('error', `No tables found in ${result.pages} page(s). Scanned PDFs (images) are not supported.`);
+      return setStatus('error', `No tables found in "${file.name}" (${result.pages} page(s)). Scanned PDFs (images) are not supported.`);
     }
     tables = result.tables;
     sourceName = file.name;
