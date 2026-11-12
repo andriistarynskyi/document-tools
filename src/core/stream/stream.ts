@@ -1,4 +1,4 @@
-import { isCentreInside } from '../geometry/geometry';
+import { isCentreInside, padBBox } from '../geometry/geometry';
 import type { BBox, PageContent } from '../geometry/types';
 import type { ExtractedTable, TableCell } from '../table/table';
 import { charsToWords } from '../text/words';
@@ -9,12 +9,7 @@ import { buildLines, isTabularLine, type TextLine } from './lines';
 import { assignRows, type RowDraft } from './rows';
 
 /** Words this close to a ruled table are treated as part of it. */
-const EXCLUDE_PADDING = 2;
-
-const pad = (b: BBox): BBox => ({
-  x0: b.x0 - EXCLUDE_PADDING, top: b.top - EXCLUDE_PADDING,
-  x1: b.x1 + EXCLUDE_PADDING, bottom: b.bottom + EXCLUDE_PADDING,
-});
+export const EXCLUDE_PADDING = 2;
 
 function toTable(page: number, rows: RowDraft[], boundaries: number[], lines: TextLine[]): ExtractedTable {
   // Rows may stop before the end of the block, so only lines inside the rows define the extent.
@@ -43,7 +38,7 @@ function toTable(page: number, rows: RowDraft[], boundaries: number[], lines: Te
  * claimed by ruled tables, whose words are ignored here.
  */
 export function findStreamTables(page: PageContent, exclude: readonly BBox[] = []): ExtractedTable[] {
-  const padded = exclude.map(pad);
+  const padded = exclude.map((b) => padBBox(b, EXCLUDE_PADDING));
   const words = charsToWords(page.chars.filter((c) => c.upright)).filter(
     (w) => w.upright && !padded.some((b) => isCentreInside(w, b)),
   );

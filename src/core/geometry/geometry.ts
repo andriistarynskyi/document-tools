@@ -28,6 +28,11 @@ export function getBBoxOverlap(a: BBox, b: BBox): BBox | null {
   return null;
 }
 
+/** Grows a box by `amount` on every side. */
+export function padBBox(b: BBox, amount: number): BBox {
+  return { x0: b.x0 - amount, top: b.top - amount, x1: b.x1 + amount, bottom: b.bottom + amount };
+}
+
 /** True when the object's centre lies inside the box (pdfplumber's crop test). */
 export function isCentreInside(obj: BBox, box: BBox): boolean {
   const cx = (obj.x0 + obj.x1) / 2;
