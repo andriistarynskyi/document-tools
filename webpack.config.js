@@ -24,7 +24,8 @@ module.exports = (env, argv) => {
       rules: [
         {
           test: /\.tsx?$/,
-          use: 'ts-loader',
+          // Only type-check files that are actually bundled; tests are covered by `npm run typecheck`.
+          use: { loader: 'ts-loader', options: { onlyCompileBundledFiles: true } },
           exclude: /node_modules/,
         },
         {
