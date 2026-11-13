@@ -1,6 +1,7 @@
 import type { DetectionMode } from '../core/detect/find-tables';
 import type { DocumentResult } from '../core/document/document';
 import { assembleSheet, toBlocks, type SheetBlock, type SheetModel } from '../export/sheet-layout';
+import { APP_RELOAD_MESSAGE, isChunkLoadError } from './app-load-error';
 import { byId } from './dom';
 import { renderPreview } from './preview';
 import { setStatus } from './status';
@@ -91,7 +92,8 @@ export class ReviewDialog {
       this.dialog.close();
     } catch (e) {
       console.error(e);
-      setStatus(this.status, 'error', 'Export failed. Please try again.');
+      // The Excel writer is a lazy chunk: if it is gone (new deploy), retrying cannot help.
+      setStatus(this.status, 'error', isChunkLoadError(e) ? APP_RELOAD_MESSAGE : 'Export failed. Please try again.');
     } finally {
       this.isBusy = false;
       this.render();
