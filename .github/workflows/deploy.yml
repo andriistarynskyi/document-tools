@@ -1,4 +1,4 @@
-# Checks every pull request; builds and deploys main to GitHub Pages.
+# Typechecks and builds every pull request; builds and deploys main to GitHub Pages.
 # One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 name: Build and deploy
 
@@ -28,8 +28,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      # Real-PDF regression tests skip themselves here: testFiles/ is not in the repository.
-      - run: npm test
+      # Tests are run locally (`npm test`) during the MVP phase, not in CI.
       - run: npm run build
       - name: Upload site
         if: github.event_name != 'pull_request'
