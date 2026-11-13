@@ -7,15 +7,23 @@
 // - Other same-origin files: cache first. They are content-hashed, so a cached copy is never
 //   stale. The app shell is cached on install; the large lazy chunks (pdf.js, ExcelJS) are
 //   cached the first time they are used.
+//
+// The page itself and the shell bypass the browser's HTTP cache. GitHub Pages lets browsers
+// cache every file for 10 minutes, so a plain fetch could hand back the previous deploy's page
+// (pointing at files the new deploy removed) right after this worker deleted the old cache.
 const CACHE_PREFIX = __CACHE_PREFIX__;
 const CACHE = `${CACHE_PREFIX}${__BUILD_HASH__}`;
 const APP_SHELL = __APP_SHELL__;
+/** Cache key of the page, used as the offline fallback for navigations. */
+const PAGE_KEY = './';
 
 self.addEventListener('install', (event) => {
+  // 'reload' fetches from the server and skips the HTTP cache, so the shell is this build's.
+  const requests = APP_SHELL.map((url) => new Request(url, { cache: 'reload' }));
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => cache.addAll(requests))
       .then(() => self.skipWaiting()),
   );
 });
@@ -38,12 +46,17 @@ function isCacheable(response) {
 async function networkFirst(event) {
   const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(event.request);
-    if (isCacheable(response)) event.waitUntil(cache.put('./', response.clone()));
+    // 'no-cache' revalidates with the server (cheap when unchanged) instead of trusting the
+    // HTTP cache. Fetching by URL avoids copying a navigate-mode request, which some browsers reject.
+    const response = await fetch(event.request.url, { cache: 'no-cache', credentials: 'same-origin' });
+    // A navigation must not be answered with a followed redirect (e.g. /repo -> /repo/);
+    // send a real redirect so the browser updates the address bar.
+    if (response.redirected) return Response.redirect(response.url, 302);
+    if (isCacheable(response)) event.waitUntil(cache.put(PAGE_KEY, response.clone()));
     return response;
   } catch (error) {
     // Offline: fall back to the cached page; rethrow when there is none.
-    const cached = await cache.match('./');
+    const cached = await cache.match(PAGE_KEY);
     if (cached) return cached;
     throw error;
   }
