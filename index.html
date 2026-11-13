@@ -21,7 +21,7 @@
   <main>
     <section class="card">
       <h2>Upload a PDF</h2>
-      <p class="muted">We'll find all tables and export each one to its own sheet in an Excel file. PDF only, max 10 MB.</p>
+      <p class="muted">We'll find the tables, with or without lines, and put them on one Excel sheet. You can review everything before downloading. PDF only, max 10 MB.</p>
 
       <label id="drop" class="drop" tabindex="0">
         <input id="file" type="file" accept="application/pdf,.pdf" hidden />
@@ -39,18 +39,29 @@
     </section>
   </main>
 
-  <dialog id="dialog" aria-labelledby="dlgTitle">
-    <form method="dialog" class="dlg">
-      <header>
-        <h2 id="dlgTitle">Tables found</h2>
-        <p class="muted" id="dlgSub"></p>
+  <dialog id="dialog" aria-labelledby="dlgTitle" aria-describedby="dlgSub">
+    <div class="dlg">
+      <header class="dlg-head">
+        <div class="dlg-titles">
+          <h2 id="dlgTitle">Review before download</h2>
+          <p class="muted" id="dlgSub"></p>
+        </div>
+        <label class="mode">
+          <span>Detection</span>
+          <select id="mode">
+            <option value="auto">Automatic</option>
+            <option value="lattice">Tables with lines only</option>
+            <option value="stream">Tables without lines only</option>
+          </select>
+        </label>
       </header>
-      <ul id="list" class="list"></ul>
-      <footer>
-        <button value="cancel" class="btn text">Cancel</button>
-        <button type="button" id="exportBtn" class="btn primary">Export to XLSX</button>
+      <div id="dlgStatus" class="status" role="status" aria-live="polite" hidden></div>
+      <div id="preview" class="preview-body"></div>
+      <footer class="dlg-foot">
+        <button type="button" id="cancelBtn" class="btn">Cancel</button>
+        <button type="button" id="exportBtn" class="btn primary">Download XLSX</button>
       </footer>
-    </form>
+    </div>
   </dialog>
 </body>
 </html>

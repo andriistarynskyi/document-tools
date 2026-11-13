@@ -1,185 +1,53 @@
 import './styles.css';
-import { extractTables, isPasswordError, type DetectedTable } from './pdf-tables';
-import { exportTables } from './export';
-
-const MAX_SIZE_MB = 10;
-const MAX_SIZE = MAX_SIZE_MB * 1024 * 1024;
-
-function byId<T extends HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`Missing element #${id}`);
-  return el as T;
-}
+import { byId } from './app/dom';
+import { download, xlsxName } from './app/download';
+import { describeError, ExtractClient } from './app/extract-client';
+import { ReviewDialog } from './app/review-dialog';
+import { setProgress, setStatus } from './app/status';
+import { validateFile } from './app/validate-file';
+import type { SheetModel } from './export/sheet-layout';
 
 const drop = byId<HTMLLabelElement>('drop');
 const input = byId<HTMLInputElement>('file');
 const fileName = byId('fileName');
 const status = byId('status');
-const dialog = byId<HTMLDialogElement>('dialog');
-const list = byId('list');
-const dlgSub = byId('dlgSub');
-const exportBtn = byId<HTMLButtonElement>('exportBtn');
 
-let tables: DetectedTable[] = [];
-let sourceName = '';
-let analyzing = false; // ignore new files while a PDF is being processed
+/** Created on the first file: the worker pulls in pdf.js (~1.7 MB), which visitors who never upload do not need. */
+let client: ExtractClient | null = null;
+const getClient = (): ExtractClient => (client ??= new ExtractClient());
+let isAnalyzing = false; // ignore new files while one is being processed
 
-function setStatus(kind: 'busy' | 'error' | 'ok' | null, message = ''): void {
-  status.hidden = kind === null;
-  status.className = `status ${kind ?? ''}`;
-  status.replaceChildren();
-  if (kind === 'busy') {
-    const s = document.createElement('div');
-    s.className = 'spinner';
-    status.append(s);
-  }
-  status.append(document.createTextNode(message));
+async function exportSheet(model: SheetModel, sourceName: string): Promise<void> {
+  // ExcelJS is large; load it only when the user actually downloads.
+  const { writeXlsx, XLSX_MIME } = await import('./export/xlsx-writer');
+  const buffer = await writeXlsx(model, sourceName);
+  download(new Blob([buffer], { type: XLSX_MIME }), xlsxName(sourceName));
 }
 
-/** Shows a determinate progress bar while a (larger) PDF is analyzed. */
-function setProgress(fraction: number, message: string): void {
-  status.hidden = false;
-  status.className = 'status busy';
-  const pct = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
-
-  const label = document.createElement('div');
-  label.className = 'progress-label';
-  label.textContent = `${message} ${pct}%`;
-
-  const track = document.createElement('div');
-  track.className = 'progress';
-  track.setAttribute('role', 'progressbar');
-  track.setAttribute('aria-valuemin', '0');
-  track.setAttribute('aria-valuemax', '100');
-  track.setAttribute('aria-valuenow', String(pct));
-  const fill = document.createElement('div');
-  fill.className = 'progress-fill';
-  fill.style.width = `${pct}%`;
-  track.append(fill);
-
-  status.replaceChildren(label, track);
-}
-
-/** Back to the initial screen. */
-function resetState(): void {
-  tables = [];
-  sourceName = '';
-  list.replaceChildren();
-  fileName.textContent = 'No file selected';
-  setStatus(null);
-}
-
-function isPdf(file: File): boolean {
-  // Trust the browser-reported MIME first; fall back to extension when it's blank/generic.
-  if (file.type) return file.type === 'application/pdf';
-  return /\.pdf$/i.test(file.name);
-}
-
-function validate(file: File): string | null {
-  if (!isPdf(file)) return 'Only PDF files are supported. Please choose a .pdf file.';
-  if (file.size === 0) return 'This file is empty.';
-  if (file.size > MAX_SIZE) {
-    return `File is ${(file.size / 1048576).toFixed(1)} MB, over the ${MAX_SIZE_MB} MB limit.`;
-  }
-  return null;
-}
+const dialog = new ReviewDialog({ reanalyze: (mode) => getClient().analyze(mode), exportSheet });
 
 async function handleFile(file: File | undefined): Promise<void> {
-  if (!file || analyzing) return;
-
-  tables = [];
-  sourceName = '';
+  if (!file || isAnalyzing) return;
   fileName.textContent = file.name;
+  const problem = validateFile(file);
+  if (problem) return setStatus(status, 'error', problem);
 
-  const problem = validate(file);
-  if (problem) return setStatus('error', problem);
-
-  analyzing = true;
-  setProgress(0, 'Analyzing PDF…');
+  isAnalyzing = true;
+  setProgress(status, 0, 'Reading PDF…');
   try {
-    const buffer = await file.arrayBuffer();
-    const result = await extractTables(buffer, (fraction) => setProgress(fraction, 'Analyzing PDF…'));
-    if (!result.tables.length) {
-      return setStatus('error', `No tables found in "${file.name}" (${result.pages} page(s)). Scanned PDFs (images) are not supported.`);
+    const doc = await getClient().extract(await file.arrayBuffer(), 'auto', (f) => setProgress(status, f, 'Reading PDF…'));
+    if (!doc.tables.length) {
+      return setStatus(status, 'error', `No tables found in "${file.name}" (${doc.pageCount} page(s)).`);
     }
-    tables = result.tables;
-    sourceName = file.name;
-    setStatus('ok', `Found ${tables.length} table(s) in ${result.pages} page(s).`);
-    openDialog(result.pages);
+    // The review dialog shows the page and table counts, so the upload card needs no message.
+    setStatus(status, null);
+    dialog.open(doc, file.name);
   } catch (e) {
-    console.error(e);
-    setStatus(
-      'error',
-      isPasswordError(e)
-        ? 'This PDF is password protected.'
-        : 'Could not read this PDF. It may be corrupted.',
-    );
+    setStatus(status, 'error', describeError(e));
   } finally {
-    analyzing = false;
+    isAnalyzing = false;
   }
 }
-
-function tableItem(t: DetectedTable): HTMLLIElement {
-  const li = document.createElement('li');
-  const label = document.createElement('label');
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = true;
-  cb.value = String(t.id);
-  cb.addEventListener('change', updateExportState);
-
-  const info = document.createElement('div');
-  info.className = 'info';
-  const title = document.createElement('div');
-  title.className = 'title';
-  title.textContent = `Table ${t.id} · page ${t.page} · ${t.rows.length} rows × ${t.rows[0].length} cols`;
-  const preview = document.createElement('div');
-  preview.className = 'preview';
-  preview.textContent = t.rows[0].filter(Boolean).join(' | ');
-
-  info.append(title, preview);
-  label.append(cb, info);
-  li.append(label);
-  return li;
-}
-
-function openDialog(pages: number): void {
-  dlgSub.textContent = `${sourceName} · ${pages} page(s). Each selected table becomes its own sheet.`;
-  list.replaceChildren(...tables.map(tableItem));
-  updateExportState();
-  dialog.showModal();
-}
-
-function selectedTables(): DetectedTable[] {
-  const ids = new Set(
-    [...list.querySelectorAll<HTMLInputElement>('input:checked')].map((i) => Number(i.value)),
-  );
-  return tables.filter((t) => ids.has(t.id));
-}
-
-function updateExportState(): void {
-  const n = selectedTables().length;
-  exportBtn.disabled = n === 0;
-  exportBtn.textContent = n ? `Export ${n} to XLSX` : 'Export to XLSX';
-}
-
-async function handleExport(): Promise<void> {
-  exportBtn.disabled = true; // prevent double clicks while the workbook is built
-  exportBtn.textContent = 'Exporting…';
-  try {
-    await exportTables(selectedTables(), sourceName);
-    dialog.close();
-    resetState();
-  } catch (e) {
-    console.error(e);
-    dialog.close();
-    setStatus('error', 'Export failed. Please try again.');
-  } finally {
-    updateExportState();
-  }
-}
-
-exportBtn.addEventListener('click', () => void handleExport());
 
 input.addEventListener('change', () => {
   const file = input.files?.[0];
