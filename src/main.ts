@@ -63,7 +63,8 @@ async function handleFile(file: File | undefined): Promise<void> {
     if (!doc.tables.length) {
       return setStatus(status, 'error', `No tables found in "${file.name}" (${doc.pageCount} page(s)).`);
     }
-    setStatus(status, 'ok', `Found ${doc.tables.length} table(s) in ${doc.pageCount} page(s).`);
+    // The review dialog shows the page and table counts, so the upload card needs no message.
+    setStatus(status, null);
     dialog.open(doc, file.name);
   } catch (e) {
     setStatus(status, 'error', errorMessage(e));

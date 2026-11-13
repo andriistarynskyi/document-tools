@@ -1,4 +1,4 @@
-export type StatusKind = 'busy' | 'error' | 'ok';
+export type StatusKind = 'busy' | 'error';
 
 /** Shows a message (with a spinner while busy) in a live region, or hides it for `null`. */
 export function setStatus(target: HTMLElement, kind: StatusKind | null, message = ''): void {
