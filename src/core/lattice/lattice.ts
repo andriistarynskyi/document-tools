@@ -1,8 +1,11 @@
+import type { PageContent } from '../geometry/types';
+import type { ExtractedTable } from '../table/table';
+import { splitByColumnLayout } from './bands';
 import { cellsToTables, intersectionsToCells } from './cells';
 import { filterEdges, mergeEdges } from './edges';
 import { edgesToIntersections } from './intersections';
-import { buildTable, type ExtractedTable } from '../table/table';
-import type { PageContent } from '../geometry/types';
+import { buildTables } from './nesting';
+import { splitTextRows } from './text-rows';
 
 /** Mirrors pdfplumber's default table settings for the "lines" strategy. */
 export interface LatticeSettings {
@@ -19,7 +22,12 @@ export const DEFAULT_LATTICE_SETTINGS: LatticeSettings = {
   intersectionTolerance: 3,
 };
 
-/** Finds tables drawn with ruling lines or cell borders. Pure: PageContent in, tables out. */
+/**
+ * Finds tables drawn with ruling lines or cell borders. Pure: PageContent in, tables out.
+ * pdfplumber's cell search, then three refinements for real-world forms: one border split
+ * into tables per column layout, text-based rows where only columns are ruled, and boxes
+ * nested in a cell resolved so no text appears twice.
+ */
 export function findLatticeTables(
   page: PageContent,
   settings: LatticeSettings = DEFAULT_LATTICE_SETTINGS,
@@ -35,6 +43,9 @@ export function findLatticeTables(
     x: settings.intersectionTolerance,
     y: settings.intersectionTolerance,
   });
-  const tables = cellsToTables(intersectionsToCells(intersections));
-  return tables.map((cells) => buildTable(page.pageNumber, cells, page.chars));
+  const groups = cellsToTables(intersectionsToCells(intersections))
+    .flatMap(splitByColumnLayout)
+    .filter((cells) => cells.length > 1)
+    .map((cells) => splitTextRows(cells, page.chars));
+  return buildTables(page.pageNumber, groups, page.chars);
 }

@@ -36,6 +36,15 @@ describe('assignRows', () => {
     expect(rows).toEqual([['Unit Price', 'Net Total'], ['4.50', '9.00'], ['1.25', '2.50']]);
   });
 
+  it('does not merge tightly printed totals that would stack two numbers in one cell', () => {
+    const lines = [
+      ...textLines([[[50, 'Item'], [200, 'Amount']], [[50, 'Bolt'], [200, '10.00']]], 100, 18),
+      ...textLines([[[50, 'Subtotal'], [200, '10.00']], [[50, 'Tax'], [200, '0.50']]], 140, 10),
+    ];
+    const rows = cellsOf(assignRows(lines, findColumnBoundaries(lines.filter(isTabularLine))));
+    expect(rows).toEqual([['Item', 'Amount'], ['Bolt', '10.00'], ['Subtotal', '10.00'], ['Tax', '0.50']]);
+  });
+
   it('starts a row for a section label under an empty first cell', () => {
     expect(rowsFor([
       [[200, '2024'], [300, '2023']],

@@ -11,6 +11,8 @@ export interface Canvas {
   font: PDFFont;
   line(x0: number, top0: number, x1: number, top1: number, width?: number): void;
   rect(x: number, top: number, w: number, h: number): void;
+  /** Filled rectangle without a border (shading, or a thin filled line). 0 = black, 1 = white. */
+  fill(x: number, top: number, w: number, h: number, gray?: number): void;
   text(str: string, x: number, top: number, size?: number): void;
 }
 
@@ -30,6 +32,8 @@ function canvas(page: PDFPage, font: PDFFont): Canvas {
       page.drawRectangle({
         x, y: PAGE_HEIGHT - top - h, width: w, height: h, borderColor: black, borderWidth: 0.75,
       }),
+    fill: (x, top, w, h, gray = 0) =>
+      page.drawRectangle({ x, y: PAGE_HEIGHT - top - h, width: w, height: h, color: rgb(gray, gray, gray) }),
     text: (str, x, top, size = 10) =>
       page.drawText(str, { x, y: PAGE_HEIGHT - top - size, size, font, color: black }),
   };

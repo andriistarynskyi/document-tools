@@ -18,7 +18,18 @@ export const CONTINUATION_PITCH = 1.9;
 /** How far (× line height) a row label may run past the first column boundary. */
 const LABEL_OVERRUN_FACTOR = 0.5;
 
+/** Amount-like text: digits with separators, optional sign, currency or percent. */
+const NUMERIC = /^[-(]?[$€£]?\d[\d,.]*%?\)?$/;
+
 const emptyCells = (n: number): string[] => new Array<string>(n).fill('');
+
+/**
+ * Tight lines are merged as a multi-line header, but never when that would stack two numbers
+ * in one cell: tightly printed totals ("Subtotal 10.00" / "Tax 0.50") are separate rows.
+ */
+function wouldStackNumbers(row: readonly string[], cells: readonly string[]): boolean {
+  return cells.some((text, col) => NUMERIC.test(text) && NUMERIC.test(row[col]));
+}
 
 function tabularCells(line: TextLine, boundaries: readonly number[]): string[] {
   const cells = emptyCells(boundaries.length + 1);
@@ -79,7 +90,7 @@ export function assignRows(lines: readonly TextLine[], boundaries: readonly numb
     const pitch = last ? (line.top - last.lastTop) / last.lineHeight : Infinity;
     if (isTabularLine(line)) {
       const cells = tabularCells(line, boundaries);
-      if (last?.isFromTabularLine && pitch <= SAME_ROW_PITCH) {
+      if (last?.isFromTabularLine && pitch <= SAME_ROW_PITCH && !wouldStackNumbers(last.cells, cells)) {
         cells.forEach((text, col) => text && append(last, col, text, line, ' '));
       } else {
         rows.push(newRow(cells, line, true));

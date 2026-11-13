@@ -7,6 +7,7 @@ import { readAllPages } from '../helpers/make-pdf';
 // testFiles/ is git-ignored; these regression checks run only where the sample PDFs exist.
 const INVOICE = 'testFiles/17768124-00.pdf';
 const SAMPLE = 'testFiles/sample-tables.pdf';
+const CRANE = 'testFiles/Crane supplies 678266 VALVES.pdf';
 
 async function documentOf(path: string): Promise<DocumentResult> {
   const pages = await readAllPages(new Uint8Array(readFileSync(path)));
@@ -47,6 +48,28 @@ describe.skipIf(!existsSync(INVOICE))('17768124-00.pdf as a document', () => {
   it('ends with the totals', async () => {
     const [table] = (await documentOf(INVOICE)).tables;
     expect(table.rows[table.rows.length - 1].filter(Boolean)).toEqual(['Total', '23,045.38']);
+  });
+});
+
+describe.skipIf(!existsSync(CRANE))('Crane quote (form with shading and column-only rules)', () => {
+  it('splits the form into the field box, the item table and the totals', async () => {
+    const doc = await documentOf(CRANE);
+    expect(doc.tables.map((t) => t.rows[0][0])).toEqual(['QUOTATION DATE', 'LINE', 'TERMS OF PAYMENT']);
+  });
+
+  it('reads the item table with exactly the printed columns', async () => {
+    const items = (await documentOf(CRANE)).tables[1];
+    expect(items.rows[0]).toEqual(['LINE', 'QTY ORDERED', 'U/M', 'DESCRIPTION', 'PRICE', 'DISCOUNT', 'NET', 'EXTENDED AMOUNT']);
+    expect(items.rows[1].slice(1, 3)).toEqual(['30', 'EA']);
+    expect(items.rows[1][7]).toBe('11428.20');
+  });
+
+  it('pairs each total with its label and shows no text twice', async () => {
+    const doc = await documentOf(CRANE);
+    const totals = doc.tables[2].rows.map((r) => r.slice(1));
+    expect(totals.slice(0, 3)).toEqual([['SUB TOTAL', '11,428.20'], ['G.S.T.', '571.41'], ['P.S.T.', '0.00']]);
+    const all = doc.tables.flatMap((t) => t.rows.flat()).join('\n');
+    expect(all.match(/SUB TOTAL/g)).toHaveLength(1);
   });
 });
 
