@@ -5,8 +5,10 @@ import { extractEdges, type OpCodes } from '../../src/reader/edge-extractor';
 const CODES: OpCodes = {
   save: 10, restore: 11, transform: 12, constructPath: 91, formBegin: 74, formEnd: 75,
   paintOps: [20, 22],
+  fillOnlyOps: [22],
 };
 const STROKE = 20;
+const FILL = 22;
 const END_PATH = 28; // clip / no paint
 const VIEWPORT: Matrix = [1, 0, 0, -1, 0, 100];
 
@@ -29,6 +31,22 @@ describe('extractEdges', () => {
     const edges = extractEdges(ops, CODES, VIEWPORT);
     expect(edges.filter((e) => e.orientation === 'h')).toHaveLength(2);
     expect(edges.filter((e) => e.orientation === 'v')).toHaveLength(2);
+  });
+
+  it('treats a thin filled rectangle as a ruling line', () => {
+    const ops = list([CODES.constructPath], [[FILL, [rectPath(0, 50, 200, 51)], []]]);
+    const edges = extractEdges(ops, CODES, VIEWPORT).filter((e) => e.width >= 3 || e.height >= 3);
+    expect(edges.map((e) => e.orientation)).toEqual(['h', 'h']);
+  });
+
+  it('ignores filled shading areas, which have no visible border', () => {
+    const ops = list([CODES.constructPath], [[FILL, [rectPath(0, 0, 40, 20)], []]]);
+    expect(extractEdges(ops, CODES, VIEWPORT)).toEqual([]);
+  });
+
+  it('keeps the outline of a stroked rectangle of any size', () => {
+    const ops = list([CODES.constructPath], [[STROKE, [rectPath(0, 0, 40, 20)], []]]);
+    expect(extractEdges(ops, CODES, VIEWPORT)).toHaveLength(4);
   });
 
   it('ignores paths that are only used for clipping', () => {

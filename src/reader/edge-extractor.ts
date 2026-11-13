@@ -17,6 +17,8 @@ export interface OpCodes {
   formEnd: number;
   /** Opcodes that actually paint (stroke / fill variants). `endPath` (clip) is excluded. */
   paintOps: readonly number[];
+  /** The subset of `paintOps` that fills without stroking. */
+  fillOnlyOps: readonly number[];
 }
 
 // pdf.js path-segment codes inside a constructPath payload.
@@ -28,6 +30,8 @@ const CLOSE = 4;
 
 /** Max deviation (pts) for a segment to still count as horizontal / vertical. */
 const AXIS_TOLERANCE = 0.1;
+/** A filled shape thicker than this (pts) in both directions is shading, not a line. */
+const MAX_FILLED_LINE_THICKNESS = 3;
 
 type Point = readonly [number, number];
 
@@ -85,10 +89,25 @@ function toEdge(p: Point, q: Point): Edge | null {
   return null;
 }
 
-function subPathEdges(path: SubPath, m: Matrix): Edge[] {
+/** True when the painted area is wider than a ruling line in both directions (i.e. shading). */
+function isArea(pts: readonly Point[]): boolean {
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const thickness = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  return thickness > MAX_FILLED_LINE_THICKNESS;
+}
+
+/**
+ * Edges of one subpath in page coordinates. A filled-only shape counts as a line only when
+ * it is thin: many PDFs draw borders as thin filled rectangles, while larger fills are
+ * background shading whose outline is not a visible border.
+ */
+function subPathEdges(path: SubPath, m: Matrix, isFillOnly: boolean): Edge[] {
   if (path.isCurved) return [];
   const pts = path.points.map(([x, y]) => applyToPoint(m, x, y) as Point);
-  if (path.closed && pts.length > 1) pts.push(pts[0]);
+  if (isFillOnly && isArea(pts)) return [];
+  // A fill is implicitly closed, so its last side counts even without an explicit close.
+  if ((path.closed || isFillOnly) && pts.length > 2) pts.push(pts[0]);
   const edges: Edge[] = [];
   for (let i = 1; i < pts.length; i++) {
     const edge = toEdge(pts[i - 1], pts[i]);
@@ -115,6 +134,7 @@ function pathPayload(args: unknown): { paintOp: number; coords: ArrayLike<number
  */
 export function extractEdges(ops: OperatorListLike, codes: OpCodes, viewport: Matrix): Edge[] {
   const paint = new Set(codes.paintOps);
+  const fillOnly = new Set(codes.fillOnlyOps);
   const stack: Matrix[] = [];
   let ctm: Matrix = IDENTITY;
   const edges: Edge[] = [];
@@ -139,7 +159,8 @@ export function extractEdges(ops: OperatorListLike, codes: OpCodes, viewport: Ma
       const payload = pathPayload(args);
       if (!payload || !paint.has(payload.paintOp)) continue;
       const total = multiply(ctm, viewport);
-      for (const sub of parsePath(payload.coords)) edges.push(...subPathEdges(sub, total));
+      const isFillOnly = fillOnly.has(payload.paintOp);
+      for (const sub of parsePath(payload.coords)) edges.push(...subPathEdges(sub, total, isFillOnly));
     }
   }
   return edges;

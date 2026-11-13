@@ -35,6 +35,30 @@ describe('charsToWords', () => {
   });
 });
 
+describe('rotated text', () => {
+  /** A column of rotated chars at x, one 6pt-tall char per letter going down from `top`. */
+  const vertical = (text: string, x: number, top: number): Char[] =>
+    Array.from(text).map((t, i) => ({
+      text: t, size: 6, upright: false, x0: x, x1: x + 6, top: top + i * 6, bottom: top + i * 6 + 6,
+    }));
+
+  it('never joins rotated chars with the horizontal words they pass', () => {
+    const input = [...vertical('Ky', 10, 0), ...chars('LINE', 20, 3)];
+    const words = charsToWords(input);
+    expect(words.filter((w) => w.upright).map((w) => w.text)).toEqual(['LINE']);
+    expect(words.filter((w) => !w.upright).map((w) => w.text)).toEqual(['Ky']);
+  });
+
+  it('reads a rotated column top to bottom and splits it at gaps', () => {
+    const input = [...vertical('AB', 10, 0), ...vertical('CD', 10, 40)];
+    expect(charsToWords(input).map((w) => w.text)).toEqual(['AB', 'CD']);
+  });
+
+  it('puts rotated words after the horizontal lines in extracted text', () => {
+    expect(extractText([...vertical('Side', 10, 0), ...chars('Total', 30, 0)])).toBe('Total\nSide');
+  });
+});
+
 describe('extractText', () => {
   it('joins words with spaces and lines with newlines', () => {
     const input = [...chars('hello world', 0, 0), ...chars('second', 0, 20)];

@@ -41,6 +41,7 @@ export function toOpCodes(ops: PdfOps): OpCodes {
       ops.stroke, ops.closeStroke, ops.fill, ops.eoFill,
       ops.fillStroke, ops.eoFillStroke, ops.closeFillStroke, ops.closeEOFillStroke,
     ],
+    fillOnlyOps: [ops.fill, ops.eoFill],
   };
 }
 

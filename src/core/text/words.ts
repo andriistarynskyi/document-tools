@@ -34,8 +34,38 @@ function toWord(chars: Char[]): Word {
   };
 }
 
-/** Groups chars into words. Chars are first split into visual lines, then read left to right. */
+/**
+ * Groups chars into words. Upright and rotated text never mix (as in pdfplumber): margin
+ * text printed sideways would otherwise be glued onto the horizontal words it passes.
+ */
 export function charsToWords(chars: readonly Char[], tol = DEFAULT_TEXT_TOLERANCES): Word[] {
+  return [
+    ...uprightWords(chars.filter((c) => c.upright), tol),
+    ...rotatedWords(chars.filter((c) => !c.upright), tol),
+  ];
+}
+
+/** Rotated text runs along a column: cluster by x, read top to bottom, break on gaps. */
+function rotatedWords(chars: readonly Char[], tol: TextTolerances): Word[] {
+  const words: Word[] = [];
+  for (const column of clusterObjects(chars, (c) => c.x0, tol.xTolerance)) {
+    let current: Char[] = [];
+    for (const ch of [...column].sort((a, b) => a.top - b.top)) {
+      const prev = current[current.length - 1];
+      if (isSpace(ch.text) || (prev && ch.top > prev.bottom + tol.yTolerance)) {
+        if (current.length) words.push(toWord(current));
+        current = isSpace(ch.text) ? [] : [ch];
+      } else {
+        current.push(ch);
+      }
+    }
+    if (current.length) words.push(toWord(current));
+  }
+  return words;
+}
+
+/** Horizontal text: split into visual lines, then read left to right. */
+function uprightWords(chars: readonly Char[], tol: TextTolerances): Word[] {
   const words: Word[] = [];
   for (const line of clusterObjects(chars, (c) => c.top, tol.yTolerance)) {
     const ordered = [...line].sort((a, b) => a.x0 - b.x0);
@@ -56,10 +86,14 @@ export function charsToWords(chars: readonly Char[], tol = DEFAULT_TEXT_TOLERANC
   return words;
 }
 
-/** Plain-text reading of chars: words joined by spaces, visual lines joined by "\n". */
+/**
+ * Plain-text reading of chars: words joined by spaces, visual lines joined by "\n".
+ * Rotated words (e.g. a sideways cell label) follow as their own lines, left to right.
+ */
 export function extractText(chars: readonly Char[], tol = DEFAULT_TEXT_TOLERANCES): string {
-  const lines = clusterObjects(charsToWords(chars, tol), (w) => w.top, tol.yTolerance);
-  return lines
-    .map((line) => [...line].sort((a, b) => a.x0 - b.x0).map((w) => w.text).join(' '))
-    .join('\n');
+  const words = charsToWords(chars, tol);
+  const lines = clusterObjects(words.filter((w) => w.upright), (w) => w.top, tol.yTolerance)
+    .map((line) => [...line].sort((a, b) => a.x0 - b.x0).map((w) => w.text).join(' '));
+  const rotated = words.filter((w) => !w.upright).sort((a, b) => a.x0 - b.x0).map((w) => w.text);
+  return [...lines, ...rotated].join('\n');
 }

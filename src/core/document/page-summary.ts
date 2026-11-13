@@ -1,4 +1,4 @@
-import { findTables, type DetectionMode } from '../detect/find-tables';
+import { claimedAreas, findTables, type DetectionMode } from '../detect/find-tables';
 import { isCentreInside, padBBox } from '../geometry/geometry';
 import type { BBox, PageContent } from '../geometry/types';
 import { buildLines } from '../stream/lines';
@@ -24,8 +24,10 @@ export interface PageSummary {
 
 export function summarizePage(page: PageContent, mode: DetectionMode = 'auto'): PageSummary {
   const tables = findTables(page, mode);
-  const claimed = tables.map((t) => padBBox(t.bbox, EXCLUDE_PADDING));
-  const words = charsToWords(page.chars).filter((w) => !claimed.some((b) => isCentreInside(w, b)));
+  const claimed = tables.flatMap(claimedAreas).map((b) => padBBox(b, EXCLUDE_PADDING));
+  // Only horizontal text can be a header or footer line; sideways margin text is ignored.
+  const words = charsToWords(page.chars.filter((c) => c.upright))
+    .filter((w) => !claimed.some((b) => isCentreInside(w, b)));
   const lines = buildLines(words).map((l) => ({
     x0: l.words[0].x0,
     x1: l.words[l.words.length - 1].x1,
