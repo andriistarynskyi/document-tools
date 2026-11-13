@@ -76,6 +76,8 @@ describe('ExtractClient', () => {
   });
 
   it('treats an error after the worker answered as a failure inside the worker', async () => {
+    // Some runtimes (Node 24) have no global ErrorEvent; the client must not depend on it.
+    vi.stubGlobal('ErrorEvent', undefined);
     const client = new ExtractClient();
     const first = client.extract(new ArrayBuffer(8), 'auto');
     FakeWorker.last.answer({ type: 'result', id: FakeWorker.last.sent[0].id, result: RESULT });

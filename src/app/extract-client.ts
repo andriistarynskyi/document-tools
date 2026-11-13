@@ -28,6 +28,15 @@ export function describeError(e: unknown): string {
   return GENERIC_MESSAGE;
 }
 
+/**
+ * The message of a worker error event. Read structurally rather than with `instanceof
+ * ErrorEvent`: that global is missing in some runtimes (e.g. Node 24, where tests run).
+ */
+function errorDetail(e: Event): string {
+  const message: unknown = Reflect.get(e, 'message');
+  return typeof message === 'string' && message ? message : 'Worker failed';
+}
+
 interface Pending {
   resolve(result: DocumentResult): void;
   reject(error: Error): void;
@@ -80,8 +89,7 @@ export class ExtractClient {
       this.failAll(this.loadFailure);
       return;
     }
-    const detail = e instanceof ErrorEvent && e.message ? e.message : 'Worker failed';
-    this.failAll(new ClientError('unknown', detail));
+    this.failAll(new ClientError('unknown', errorDetail(e)));
   }
 
   private handle(msg: WorkerResponse): void {
