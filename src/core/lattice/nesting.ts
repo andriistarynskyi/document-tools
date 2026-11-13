@@ -8,7 +8,8 @@ const contains = (outer: BBox, inner: BBox): boolean =>
   outer.x0 - TOLERANCE <= inner.x0 && inner.x1 <= outer.x1 + TOLERANCE &&
   outer.top - TOLERANCE <= inner.top && inner.bottom <= outer.bottom + TOLERANCE;
 
-const filledColumns = (t: ExtractedTable): number =>
+/** Columns of the table that have text in at least one row. */
+const nonEmptyColumnCount = (t: ExtractedTable): number =>
   t.rows[0].filter((_, c) => t.rows.some((r) => r[c] !== '')).length;
 
 /**
@@ -24,7 +25,7 @@ export function buildTables(page: number, groups: readonly BBox[][], chars: read
 
   const nested = groups
     .map((g, i) => (isNested[i] ? buildTable(page, g, chars) : null))
-    .filter((t): t is ExtractedTable => t !== null && filledColumns(t) >= 2);
+    .filter((t): t is ExtractedTable => t !== null && nonEmptyColumnCount(t) >= 2);
   const claimed = nested.map((t) => t.bbox);
   const outerChars = chars.filter((c) => !claimed.some((b) => isCentreInside(c, b)));
 

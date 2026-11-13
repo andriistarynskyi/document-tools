@@ -4,7 +4,10 @@ import { summarizePage } from '../core/document/page-summary';
 import type { PageContent } from '../core/geometry/types';
 import { readPage, type PdfOps, type PdfPageLike } from '../reader/page-reader';
 
-/** Hard limits that keep a hostile or huge file from exhausting the browser. */
+/**
+ * Page limit that keeps a hostile or huge file from exhausting the browser. (The file size
+ * limit is checked before reading, in `app/validate-file.ts`.)
+ */
 export const MAX_PAGES = 1000;
 
 /** The slice of the pdf.js module the pipeline uses, injected so it runs in a worker or in Node. */

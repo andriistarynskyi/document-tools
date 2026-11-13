@@ -2,8 +2,9 @@
  * Shared geometry types for the table extraction core.
  *
  * Coordinates follow pdfplumber's convention: the origin is the TOP-LEFT of the page,
- * y grows downward (`top` < `bottom`). The pdf.js reader converts into this system
- * so every algorithm below can be a direct port of its pdfplumber counterpart.
+ * y grows downward (`top` < `bottom`). The pdf.js reader converts into this system, so the
+ * code ported from pdfplumber keeps its original arithmetic and the project's own
+ * algorithms (borderless tables, forms, document assembly) share the same coordinates.
  *
  * This module is pure data: no DOM and no pdf.js imports.
  */

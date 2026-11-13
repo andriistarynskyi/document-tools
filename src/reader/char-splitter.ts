@@ -26,6 +26,46 @@ function unit(x: number, y: number): [number, number] {
   return len === 0 ? [0, 0] : [x / len, y / len];
 }
 
+type Vec = readonly [number, number];
+
+/** A run's text-space frame: baseline origin, reading direction and "up" direction (unit vectors). */
+interface RunFrame {
+  origin: Vec;
+  dir: Vec;
+  up: Vec;
+  size: number;
+}
+
+function runFrame(run: TextRun): RunFrame {
+  const [a, b, c, d, e, f] = run.transform;
+  return { origin: [e, f], dir: unit(a, b), up: unit(c, d), size: Math.hypot(c, d) || run.height };
+}
+
+/**
+ * Page box of the glyph that spans [start, end] along the baseline: its four corners are
+ * mapped through the viewport (which may rotate and flips y), then the extremes are taken.
+ */
+function glyphBox(frame: RunFrame, start: number, end: number, viewport: Matrix) {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const s of [start, end]) {
+    for (const t of [0, frame.size]) {
+      const px = frame.origin[0] + frame.dir[0] * s + frame.up[0] * t;
+      const py = frame.origin[1] + frame.dir[1] * s + frame.up[1] * t;
+      const [x, y] = applyToPoint(viewport, px, py);
+      xs.push(x);
+      ys.push(y);
+    }
+  }
+  return { x0: Math.min(...xs), x1: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+}
+
+/** Text reads left to right on the page when its direction is (nearly) horizontal after the viewport. */
+function isUpright(frame: RunFrame, viewport: Matrix): boolean {
+  const [vx, vy] = applyToVector(viewport, frame.dir[0], frame.dir[1]);
+  return Math.abs(vy) <= UPRIGHT_SLOPE * Math.abs(vx);
+}
+
 /**
  * Splits one text run into per-character boxes in page (top-left origin) coordinates.
  * Run edges are exact; interior glyph boundaries are estimated from relative glyph widths.
@@ -34,45 +74,20 @@ export function splitRun(run: TextRun, viewport: Matrix): Char[] {
   const glyphs = Array.from(run.str);
   if (glyphs.length === 0 || run.width <= 0) return [];
 
-  const [a, b, c, d, e, f] = run.transform;
-  const dir = unit(a, b);
-  const up = unit(c, d);
-  const size = Math.hypot(c, d) || run.height;
-  const [vx, vy] = applyToVector(viewport, dir[0], dir[1]);
-  const upright = Math.abs(vy) <= UPRIGHT_SLOPE * Math.abs(vx);
-
+  const frame = runFrame(run);
+  const upright = isUpright(frame, viewport);
   const weights = glyphs.map(glyphWeight);
   const total = weights.reduce((s, w) => s + w, 0);
-  const chars: Char[] = [];
   let offset = 0;
-
-  glyphs.forEach((text, i) => {
-    const w = (weights[i] / total) * run.width;
-    const xs = [offset, offset + w];
-    const ys = [0, size];
-    const px: number[] = [];
-    const py: number[] = [];
-    for (const s of xs) {
-      for (const t of ys) {
-        const [x, y] = applyToPoint(viewport, e + dir[0] * s + up[0] * t, f + dir[1] * s + up[1] * t);
-        px.push(x);
-        py.push(y);
-      }
-    }
-    chars.push({
-      text,
-      size,
-      upright,
-      x0: Math.min(...px),
-      x1: Math.max(...px),
-      top: Math.min(...py),
-      bottom: Math.max(...py),
-    });
-    offset += w;
+  return glyphs.map((text, i) => {
+    const width = (weights[i] / total) * run.width;
+    const box = glyphBox(frame, offset, offset + width, viewport);
+    offset += width;
+    return { text, size: frame.size, upright, ...box };
   });
-  return chars;
 }
 
+/** Splits every text run of a page into chars, in content order. */
 export function splitRuns(runs: readonly TextRun[], viewport: Matrix): Char[] {
   return runs.flatMap((run) => splitRun(run, viewport));
 }

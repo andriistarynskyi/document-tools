@@ -1,7 +1,7 @@
-import { clusterObjects } from '../geometry/cluster';
 import { isCentreInside, objectsToBBox } from '../geometry/geometry';
-import type { BBox, Char, Word } from '../geometry/types';
-import { charsToWords, DEFAULT_TEXT_TOLERANCES } from '../text/words';
+import type { BBox, Char } from '../geometry/types';
+import { buildLines, type TextLine } from '../stream/lines';
+import { charsToWords } from '../text/words';
 import { innerColumnLines, toBands } from './bands';
 
 /** A line must fill at least this share of the band's columns to start a new record. */
@@ -9,23 +9,14 @@ const MIN_RECORD_FILL = 0.5;
 /** ...and sit at least this many line heights below the previous line (wrapped text is tighter). */
 const MIN_RECORD_PITCH = 1.3;
 
-interface TextLine {
-  top: number;
-  bottom: number;
-  words: Word[];
+/** Horizontal text lines inside `area`, top to bottom. */
+function linesIn(chars: readonly Char[], area: BBox): TextLine[] {
+  return buildLines(charsToWords(chars.filter((c) => c.upright && isCentreInside(c, area))));
 }
 
-function textLines(chars: readonly Char[], area: BBox): TextLine[] {
-  const words = charsToWords(chars.filter((c) => c.upright && isCentreInside(c, area)));
-  return clusterObjects(words, (w) => w.top, DEFAULT_TEXT_TOLERANCES.yTolerance).map((ws) => ({
-    top: Math.min(...ws.map((w) => w.top)),
-    bottom: Math.max(...ws.map((w) => w.bottom)),
-    words: ws,
-  }));
-}
-
-function filledColumns(line: TextLine, lines: readonly number[]): number {
-  const cols = line.words.map((w) => lines.filter((x) => x < (w.x0 + w.x1) / 2).length);
+/** How many of the band's columns (split at `columnLines`) the line puts a word in. */
+function occupiedColumnCount(line: TextLine, columnLines: readonly number[]): number {
+  const cols = line.words.map((w) => columnLines.filter((x) => x < (w.x0 + w.x1) / 2).length);
   return new Set(cols).size;
 }
 
@@ -47,13 +38,13 @@ function isRuledBetween(band: readonly BBox[], above: TextLine, below: TextLine)
 function recordCuts(band: readonly BBox[], chars: readonly Char[]): number[] {
   const columns = innerColumnLines(band);
   const minFill = Math.max(2, Math.ceil(MIN_RECORD_FILL * (columns.length + 1)));
-  const lines = textLines(chars, objectsToBBox(band));
+  const lines = linesIn(chars, objectsToBBox(band));
   const cuts: number[] = [];
   for (let i = 1; i < lines.length; i++) {
     const prev = lines[i - 1];
     const line = lines[i];
-    const height = line.bottom - line.top || 1;
-    const isRecordStart = filledColumns(line, columns) >= minFill && (line.top - prev.top) / height >= MIN_RECORD_PITCH;
+    const pitch = (line.top - prev.top) / (line.height || 1);
+    const isRecordStart = occupiedColumnCount(line, columns) >= minFill && pitch >= MIN_RECORD_PITCH;
     if (isRecordStart && !isRuledBetween(band, prev, line)) cuts.push((prev.bottom + line.top) / 2);
   }
   return cuts;
