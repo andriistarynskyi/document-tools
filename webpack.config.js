@@ -3,7 +3,7 @@ const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
-const CopyPlugin = require('copy-webpack-plugin');
+const { ServiceWorkerPlugin } = require('./build/service-worker-plugin');
 
 // MIT requires the notice to ship with the code. It is added to the JS after minification,
 // so it stays in the scripts (visible in dev tools) and never shows in the UI or exports.
@@ -93,10 +93,8 @@ module.exports = (env, argv) => {
         } : {}),
       }),
       new MiniCssExtractPlugin({ filename: '[name].[contenthash:8].css' }),
-      new CopyPlugin({
-        // Service worker at root (must not be content-hashed)
-        patterns: [{ from: 'public/sw.js', to: 'sw.js' }],
-      }),
+      // Service worker at the root (its own file name must not be content-hashed).
+      new ServiceWorkerPlugin({ template: path.resolve(__dirname, 'public/sw.js'), cachePrefix: 'pdf-tables-' }),
       new webpack.BannerPlugin({
         banner: LICENSE_BANNER,
         raw: true,
@@ -113,6 +111,7 @@ module.exports = (env, argv) => {
       // Required for service worker scope to work
       headers: { 'Service-Worker-Allowed': '/' },
     },
-    devtool: isProd ? 'source-map' : 'eval-source-map',
+    // No source maps in production: dist/ is deployed as-is to GitHub Pages.
+    devtool: isProd ? false : 'eval-source-map',
   };
 };
