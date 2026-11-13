@@ -72,6 +72,7 @@ function renderBlock(block: SheetBlock, options: PreviewOptions): HTMLElement {
   heading.id = headingId;
   const toggle = el('button', 'btn small', isIncluded ? 'Included' : 'Excluded');
   toggle.type = 'button';
+  toggle.dataset.blockId = block.id;
   toggle.setAttribute('aria-pressed', String(isIncluded));
   toggle.setAttribute('aria-label', `Include ${block.title} in the download`);
   toggle.addEventListener('click', () => options.onToggle(block.id));
@@ -90,7 +91,21 @@ function renderBlock(block: SheetBlock, options: PreviewOptions): HTMLElement {
   return section;
 }
 
-/** Renders the sheet the user is about to download, block by block. */
+/** Id of the block whose toggle has keyboard focus inside `container`, if any. */
+function focusedBlockId(container: HTMLElement): string | null {
+  const active = document.activeElement;
+  return active instanceof HTMLElement && container.contains(active) ? active.dataset.blockId ?? null : null;
+}
+
+/**
+ * Renders the sheet the user is about to download, block by block. Re-rendering replaces
+ * every toggle button, so focus is moved to the new button of the same block; otherwise
+ * keyboard and screen-reader users would lose their place after each click.
+ */
 export function renderPreview(container: HTMLElement, blocks: readonly SheetBlock[], options: PreviewOptions): void {
+  const focusedId = focusedBlockId(container);
   container.replaceChildren(...blocks.map((b) => renderBlock(b, options)));
+  if (focusedId === null) return;
+  const toggles = container.querySelectorAll<HTMLButtonElement>('button[data-block-id]');
+  [...toggles].find((b) => b.dataset.blockId === focusedId)?.focus();
 }
