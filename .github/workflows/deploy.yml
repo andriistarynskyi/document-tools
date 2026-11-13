@@ -1,5 +1,8 @@
 # Typechecks and builds every pull request; builds and deploys main to GitHub Pages.
 # One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+#
+# Actions are pinned to full commit SHAs (the version is in the comment): a tag can be moved
+# to different code, a commit cannot. Node comes from .nvmrc, the same version used locally.
 name: Build and deploy
 
 on:
@@ -21,10 +24,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 24
+          # The workflow never pushes, so the token is not kept in .git/config.
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -32,7 +38,7 @@ jobs:
       - run: npm run build
       - name: Upload site
         if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
 
@@ -48,4 +54,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
