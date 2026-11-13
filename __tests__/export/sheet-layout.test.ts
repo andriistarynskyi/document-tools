@@ -25,6 +25,18 @@ describe('toBlocks', () => {
     expect(blocks[2].title).toBe('Table 2 · page 2 · 2 × 2');
   });
 
+  it('drops merges that overlap an earlier one, so the export cannot fail on them', () => {
+    const doc = {
+      ...DOC,
+      tables: [docTable([['a', ''], ['', '']], [1], [
+        { row: 0, col: 0, rowSpan: 2, colSpan: 2 },
+        { row: 1, col: 0, rowSpan: 1, colSpan: 2 },
+      ])],
+    };
+    const table = toBlocks(doc).find((b) => b.kind === 'table');
+    expect(table?.merges).toEqual([{ row: 0, col: 0, rowSpan: 2, colSpan: 2 }]);
+  });
+
   it('omits an empty header and footer', () => {
     const blocks = toBlocks({ ...DOC, header: [], footer: [] });
     expect(blocks.map((b) => b.kind)).toEqual(['table', 'table']);

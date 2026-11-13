@@ -31,6 +31,22 @@ export interface SheetModel {
   columnCount: number;
 }
 
+const overlaps = (a: Merge, b: Merge): boolean =>
+  a.row < b.row + b.rowSpan && b.row < a.row + a.rowSpan && a.col < b.col + b.colSpan && b.col < a.col + a.colSpan;
+
+/**
+ * Keeps merges that do not overlap an earlier one. A spreadsheet cannot merge a cell twice
+ * (ExcelJS throws and the whole export would fail). Dropping a merge only loses formatting,
+ * never text, so this is handled here deliberately rather than reported as an error.
+ */
+export function disjointMerges(merges: readonly Merge[]): Merge[] {
+  const kept: Merge[] = [];
+  for (const m of merges) {
+    if (m.rowSpan * m.colSpan > 1 && !kept.some((k) => overlaps(k, m))) kept.push(m);
+  }
+  return kept;
+}
+
 function pageLabel(pages: readonly number[]): string {
   const first = pages[0];
   const last = pages[pages.length - 1];
@@ -50,7 +66,7 @@ export function toBlocks(doc: DocumentResult): SheetBlock[] {
       id: `table-${i + 1}`,
       title: `Table ${i + 1} · ${pageLabel(t.pages)} · ${size}`,
       rows: t.rows,
-      merges: t.merges,
+      merges: disjointMerges(t.merges),
       boldRows: [0],
     });
   });

@@ -48,6 +48,27 @@ describe('findLatticeTables', () => {
     expect(table.rows[0][0]).toBe('first\nsecond');
   });
 
+  it('does not report overlapping cells when an inner border is only partly drawn', () => {
+    // Outer 2x2 box; the middle horizontal line spans only the right column and the middle
+    // vertical line only the bottom row, which lets the cell search find overlapping boxes.
+    const edges = [
+      hEdge(50, 250, 100), hEdge(50, 250, 140), hEdge(150, 250, 120), hEdge(50, 250, 120.5),
+      vEdge(50, 100, 140), vEdge(250, 100, 140), vEdge(150, 120, 140),
+    ];
+    const chars = [...textChars('Top', 55, 105), ...textChars('L', 55, 125), ...textChars('R', 155, 125)];
+    const [table] = findLatticeTables(page(edges, chars));
+    const covered = new Set<string>();
+    for (const c of table.cells) {
+      for (let r = c.row; r < c.row + c.rowSpan; r++) {
+        for (let k = c.col; k < c.col + c.colSpan; k++) {
+          expect(covered.has(`${r},${k}`)).toBe(false);
+          covered.add(`${r},${k}`);
+        }
+      }
+    }
+    expect(table.rows.flat().filter(Boolean).sort()).toEqual(['L', 'R', 'Top']);
+  });
+
   it('returns separate tables in top-to-bottom order', () => {
     const edges = [...gridEdges([50, 150, 250], [400, 420, 440]), ...gridEdges([50, 150, 250], [100, 120, 140])];
     const tables = findLatticeTables(page(edges, []));
