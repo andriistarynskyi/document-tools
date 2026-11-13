@@ -1,6 +1,7 @@
 import type { DetectionMode } from '../core/detect/find-tables';
 import type { DocumentResult } from '../core/document/document';
 import { assembleSheet, toBlocks, type SheetBlock, type SheetModel } from '../export/sheet-layout';
+import { byId } from './dom';
 import { renderPreview } from './preview';
 import { setStatus } from './status';
 
@@ -9,12 +10,6 @@ export interface ReviewDialogDeps {
   reanalyze(mode: DetectionMode): Promise<DocumentResult>;
   /** Writes and downloads the sheet. */
   exportSheet(model: SheetModel, sourceName: string): Promise<void>;
-}
-
-function byId<T extends HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`Missing element #${id}`);
-  return node as T;
 }
 
 /** The review popup: a preview of the single sheet, a detection-mode switch and the download. */

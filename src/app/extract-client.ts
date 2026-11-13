@@ -11,6 +11,18 @@ export class ClientError extends Error {
   }
 }
 
+const GENERIC_MESSAGE = 'Could not read this PDF. It may be damaged.';
+
+/**
+ * The message to show for a failed extraction. Known problems (password, damaged file, scan)
+ * keep their specific message; anything unexpected is logged and gets a generic one.
+ */
+export function describeError(e: unknown): string {
+  if (e instanceof ClientError && e.code !== 'unknown') return e.message;
+  console.error(e);
+  return GENERIC_MESSAGE;
+}
+
 interface Pending {
   resolve(result: DocumentResult): void;
   reject(error: Error): void;

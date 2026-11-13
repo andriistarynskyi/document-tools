@@ -1,25 +1,20 @@
 import './styles.css';
+import { byId } from './app/dom';
 import { download, xlsxName } from './app/download';
-import { ClientError, ExtractClient } from './app/extract-client';
+import { describeError, ExtractClient } from './app/extract-client';
 import { ReviewDialog } from './app/review-dialog';
 import { setProgress, setStatus } from './app/status';
+import { validateFile } from './app/validate-file';
 import type { SheetModel } from './export/sheet-layout';
-
-const MAX_SIZE_MB = 10;
-const MAX_SIZE = MAX_SIZE_MB * 1024 * 1024;
-
-function byId<T extends HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`Missing element #${id}`);
-  return el as T;
-}
 
 const drop = byId<HTMLLabelElement>('drop');
 const input = byId<HTMLInputElement>('file');
 const fileName = byId('fileName');
 const status = byId('status');
 
-const client = new ExtractClient();
+/** Created on the first file: the worker pulls in pdf.js (~1.7 MB), which visitors who never upload do not need. */
+let client: ExtractClient | null = null;
+const getClient = (): ExtractClient => (client ??= new ExtractClient());
 let isAnalyzing = false; // ignore new files while one is being processed
 
 async function exportSheet(model: SheetModel, sourceName: string): Promise<void> {
@@ -29,37 +24,18 @@ async function exportSheet(model: SheetModel, sourceName: string): Promise<void>
   download(new Blob([buffer], { type: XLSX_MIME }), xlsxName(sourceName));
 }
 
-const dialog = new ReviewDialog({ reanalyze: (mode) => client.analyze(mode), exportSheet });
-
-function isPdf(file: File): boolean {
-  // Trust the browser-reported MIME first; fall back to the extension when it is blank.
-  if (file.type) return file.type === 'application/pdf';
-  return /\.pdf$/i.test(file.name);
-}
-
-function validate(file: File): string | null {
-  if (!isPdf(file)) return 'Only PDF files are supported. Please choose a .pdf file.';
-  if (file.size === 0) return 'This file is empty.';
-  if (file.size > MAX_SIZE) return `File is ${(file.size / 1048576).toFixed(1)} MB, over the ${MAX_SIZE_MB} MB limit.`;
-  return null;
-}
-
-function errorMessage(e: unknown): string {
-  if (e instanceof ClientError && e.code !== 'unknown') return e.message;
-  console.error(e);
-  return 'Could not read this PDF. It may be damaged.';
-}
+const dialog = new ReviewDialog({ reanalyze: (mode) => getClient().analyze(mode), exportSheet });
 
 async function handleFile(file: File | undefined): Promise<void> {
   if (!file || isAnalyzing) return;
   fileName.textContent = file.name;
-  const problem = validate(file);
+  const problem = validateFile(file);
   if (problem) return setStatus(status, 'error', problem);
 
   isAnalyzing = true;
   setProgress(status, 0, 'Reading PDF…');
   try {
-    const doc = await client.extract(await file.arrayBuffer(), 'auto', (f) => setProgress(status, f, 'Reading PDF…'));
+    const doc = await getClient().extract(await file.arrayBuffer(), 'auto', (f) => setProgress(status, f, 'Reading PDF…'));
     if (!doc.tables.length) {
       return setStatus(status, 'error', `No tables found in "${file.name}" (${doc.pageCount} page(s)).`);
     }
@@ -67,7 +43,7 @@ async function handleFile(file: File | undefined): Promise<void> {
     setStatus(status, null);
     dialog.open(doc, file.name);
   } catch (e) {
-    setStatus(status, 'error', errorMessage(e));
+    setStatus(status, 'error', describeError(e));
   } finally {
     isAnalyzing = false;
   }
